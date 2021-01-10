@@ -1,4 +1,4 @@
 {
-    "python.pythonPath": "/home/hongpeng/anaconda3/bin/python",
+    "python.pythonPath": "/usr/bin/python",
     "git.ignoreLimitWarning": true
 }

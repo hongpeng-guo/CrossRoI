@@ -1,7 +1,7 @@
 import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
-import create_graph
+import CreateGraph
 
 def neighbor_list (tile_shape, idx):
 	result = []
@@ -15,11 +15,11 @@ def neighbor_list (tile_shape, idx):
 		result.append(idx + tile_shape[1])
 	return result
 
-def optimization_solver(cameras, cam_to_tshape, model, time_window):
+def optimization_solver(cameras, cam_to_tshape, time_window, gt_multi_hashmap=None):
 
 	cam_to_tcount = {cam: cam_to_tshape[cam][0]*cam_to_tshape[cam][1] for cam in cam_to_tshape}
 
-	multi_hashmap, time_to_obj = create_graph.multi_cam_hashmap(cameras, 'rcnn', time_window)
+	multi_hashmap, time_to_obj = CreateGraph.multi_cam_hashmap(cameras,  time_window, gt_multi_hashmap)
 
 	try:
 		time_obj_len = sum([len(each) for each in time_to_obj.values()])
@@ -49,7 +49,7 @@ def optimization_solver(cameras, cam_to_tshape, model, time_window):
 						model.addConstr(I[counter, c] == 0)
 					else:
 						p = np.zeros(cam_to_tcount[cameras[c]])
-						for pos in multi_hashmap[cameras[c]][(t, obj)][0]:
+						for pos in multi_hashmap[cameras[c]][(t, obj)]:
 							p[pos] = 1
 						model.addConstr((I[counter, c] == 1) >> \
 							(gp.quicksum([p[j] - x[c, j] * p[j] for j in range(cam_to_tcount[cameras[c]])]) == 0))
@@ -80,9 +80,3 @@ def optimization_solver(cameras, cam_to_tshape, model, time_window):
 				result[cameras[i]].append(j)
 
 	return result
-
-
-if __name__ == '__main__':
-	cameras = ['c001', 'c002', 'c003', 'c004']
-	cam_to_tcount = {'c001': 144, 'c002': 144, 'c003': 144, 'c004': 144}
-	result = optimization_solver(cameras, cam_to_tcount, 'rcnn', [0, 600])
