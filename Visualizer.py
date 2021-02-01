@@ -1,15 +1,15 @@
 import os, cv2
 from os.path import dirname
 import numpy as np
-import CreateGraph as cg
+import General as general
 import subprocess
 import shutil, time
 from PIL import Image
 
 def plot_frame_w_nouse_tiles(cam_name, frame_id, no_use_list, filename):
-    base_frame = cg.get_frame(cam_name, frame_id)
-    f_width = cg.cameras_shape[cam_name][1]
-    t_height, t_width = cg.tile_height, cg.tile_width
+    base_frame = general.get_frame(cam_name, frame_id)
+    f_width = general.cameras_shape[cam_name][1]
+    t_height, t_width = general.tile_height, general.tile_width
     n_row = f_width // t_width
     for tile in no_use_list:
         left, top = (tile % n_row) * t_width, (tile // n_row) * t_height
@@ -18,9 +18,9 @@ def plot_frame_w_nouse_tiles(cam_name, frame_id, no_use_list, filename):
 
 
 def plot_ROI_mask(cam_name, no_use_list, filename):
-    f_height, f_width = cg.cameras_shape[cam_name][0], cg.cameras_shape[cam_name][1]
+    f_height, f_width = general.cameras_shape[cam_name][0], general.cameras_shape[cam_name][1]
     base_frame = np.ones((f_height, f_width, 3), dtype=np.uint8) * 255
-    t_height, t_width = cg.tile_height, cg.tile_width
+    t_height, t_width = general.tile_height, general.tile_width
     n_row = f_width // t_width
     for tile in no_use_list:
         left, top = (tile % n_row) * t_width, (tile // n_row) * t_height
@@ -36,7 +36,7 @@ def generate_zero_padding_video(cam_name, no_use_list):
         image_path = dir_name + f'{i+1:04}'+ ".png"
         plot_frame_w_nouse_tiles(cam_name, i+1, no_use_list, image_path)
 
-    outfile = cam_name + "_zero_pad" + ".avi"
+    outfile = cam_name + "_zero_pad" + ".mp4"
 
     encoding_result = subprocess.run(["ffmpeg", "-r", "10", "-f", "image2",
                                           "-s", "1920x1080", "-i", f"{dir_name}/%04d.png", 
@@ -54,12 +54,12 @@ def generate_org_video(cam_name):
     dir_name = os.path.join(pwd, cam_name + "_org", "")
     os.mkdir(dir_name)
     for i in range(300):
-        base_frame = cg.get_frame(cam_name, i)
+        base_frame = general.get_frame(cam_name, i)
         image_path = dir_name + f'{i+1:04}'+ ".png"
         print(image_path)
         cv2.imwrite(image_path, base_frame)
 
-    outfile = cam_name + "_org" + ".avi"
+    outfile = cam_name + "_org" + ".mp4"
 
     subprocess.run(["ffmpeg", "-r", "10", "-f", "image2",
                             "-s", "1920x1080", "-i", f"{dir_name}/%04d.png", 
@@ -72,9 +72,9 @@ def generate_org_video(cam_name):
 
 
 def plot_gt_detected_obj(cam_name):
-    vid = cv2.VideoCapture(cg.WORKSAPCE + cg.DATA_PATH + cam_name + '/' + 'vdo.avi')
+    vid = cv2.VideoCapture(general.WORKSAPCE + general.DATA_PATH + cam_name + '/' + 'vdo.avi')
     detections = {}
-    for line in open(cg.WORKSAPCE + cg.DATA_PATH + cam_name + '/' + cg.GT_PATH).readlines():
+    for line in open(general.WORKSAPCE + general.DATA_PATH + cam_name + '/' + general.GT_PATH).readlines():
         frame_id, _, left, top, width, height, _, _, _, _ = [int(each) for each in line.split(',')]
         if frame_id not in detections:
             detections[frame_id] = [(left, top, width, height)]
