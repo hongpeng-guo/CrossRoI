@@ -120,8 +120,8 @@ if __name__ == "__main__":
     for cam in outlier_dict:
         print(len(outlier_dict[cam]))
 
-    # image_frame_id = {'c001': 630, 'c002': 630, 'c003': 630, 'c004': 630, 'c005': 630}
-    image_frame_id = {'c006': 630, 'c007': 630, 'c008': 630, 'c009': 630}
+    image_frame_id = {'c001': 630, 'c002': 630, 'c003': 630, 'c004': 630, 'c005': 630}
+    # image_frame_id = {'c006': 630, 'c007': 630, 'c008': 630, 'c009': 630}
 
     unique_area = []
     total_area = []

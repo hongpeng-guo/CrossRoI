@@ -5,7 +5,7 @@ from reducto.hashbuilder import HashBuilder, ThreshMap
 
 differ_type = 'area'
 
-def get_segmented_diff_vectors(video_path, segment_size=20, segment_limit=90):
+def get_segmented_diff_vectors(video_path, segment_size=10, segment_limit=180):
     area_dp = AreaDiff()
     diff_vector_all = area_dp.get_diff_vector(video_path)
     diff_vectors = [diff_vector_all[i:i+segment_size] \
@@ -65,6 +65,8 @@ def generate_test_result(test_diff_results, pos_offset, gt_count_dict, thresh_ma
         result = AreaDiff.batch_diff_noobj(seg_vector, [thresh])
 
         segment_size = result[thresh]['num_total_frames']
+        if len(result[thresh]['selected_frames']) == 0:
+            print('Exception')
         for each_frame in result[thresh]['selected_frames']:
             selected_frames.add(pos_offset + i * segment_size + each_frame)
 

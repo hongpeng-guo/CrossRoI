@@ -1,4 +1,4 @@
-import math, cv2
+import math, cv2, os
 from os import confstr_names
 import numpy as np
 from numpy.lib.npyio import _savez_compressed_dispatcher
@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from collections import OrderedDict
 import Reducto as reducto
 from reducto.differencer import AreaDiff
+from pathlib import Path
 
 
 # environment & macro definations
@@ -255,7 +256,7 @@ def car_counting_Baseline_Roi(cameras, time_window, \
     baseline_result = [0 for _ in range(time_window[1] - time_window[0])]
     det_result = [0 for _ in range(time_window[1] - time_window[0])]
 
-    cache_interval, interval_shared_stack = 3, []
+    cache_interval, interval_shared_stack = 1, []
 
     for t in range(time_window[0], time_window[1]):
         unique_count, shared_set = 0, set()
@@ -299,9 +300,9 @@ def car_counting_Baseline_Roi(cameras, time_window, \
     diff = [max( baseline_result[i] - det_result[i], 0 ) for i in range(len(baseline_result))]
 
     print(sum(diff), sum(baseline_result), sum(diff)/ sum(baseline_result))
-    plt.plot(baseline_result)
-    plt.plot(diff)
-    plt.show()
+    # plt.plot(baseline_result)
+    # plt.plot(diff)
+    # plt.show()
 
     return baseline_result, det_result
 
@@ -319,7 +320,7 @@ def car_counting_Reducto(cameras, selected_frames, time_window):
 
     baseline_result = [0 for _ in range(time_window[1] - time_window[0])]
 
-    evaluate_interval, interval_shared_stack = 3, []
+    evaluate_interval, interval_shared_stack = 1, []
 
     prev_det_frame = {cam_name: time_window[0] for cam_name in cameras}
 
@@ -361,7 +362,7 @@ def car_counting_ReductoRoi(cameras, selected_frames, time_window, \
 
     det_result = [0 for _ in range(time_window[1] - time_window[0])]
 
-    evaluate_interval, interval_shared_stack = 3, []
+    evaluate_interval, interval_shared_stack = 1, []
 
     prev_det_frame = {cam_name: time_window[0] for cam_name in cameras}
 
@@ -390,7 +391,7 @@ def car_counting_ReductoRoi(cameras, selected_frames, time_window, \
 
 
 # get selected frames in reducto retting.
-def get_reducto_selected_frames(cameras_t_to_count, roi=False, \
+def get_reducto_selected_frames(cameras_t_to_count, roi=False, target_acc=1.0,\
                                 scene_setting='S01', crop_setting='2e-05_1.0'):
     result = {}
 
@@ -406,16 +407,16 @@ def get_reducto_selected_frames(cameras_t_to_count, roi=False, \
         else:
             video_path = 'videos/' + scene_setting + '/' + 'baseline/' + 'h264_' + cam_name + '.mp4'
 
-        diff_vectors = reducto.get_segmented_diff_vectors(video_path, segment_limit=90)
-        train_vectors, test_vectors = diff_vectors[:30], diff_vectors[30:] 
+        diff_vectors = reducto.get_segmented_diff_vectors(video_path, segment_limit=180)
+        train_vectors, test_vectors = diff_vectors[:60], diff_vectors[60:180] 
 
-        thresholds = [0.0, 0.002, 0.004, 0.006, 0.008, 0.01, 0.012, 0.014, 0.016, 0.018, 0.02]
+        thresholds = [0.0, 0.002, 0.004, 0.006, 0.008, 0.01, 0.012, 0.014, 0.016, 0.018, 0.02, 0.03, 0.05, 0.1, 0.2, 0.5]
         diff_results = reducto.get_segmented_diff_results(
                                 train_vectors, 
                                 thresholds)
         evaluations = reducto.get_segmented_evaluations(diff_results, bbox_count_dict)
 
-        thresh_map = reducto.generate_hashmap(evaluations, train_vectors)
+        thresh_map = reducto.generate_hashmap(evaluations, train_vectors, target_acc=target_acc)
 
         selected_frames = reducto.generate_test_result(test_vectors, 600, bbox_count_dict, thresh_map)
 
@@ -425,7 +426,9 @@ def get_reducto_selected_frames(cameras_t_to_count, roi=False, \
         
 
 if __name__ == '__main__':
+    EVA_REDUCTO = False
     CROP_DET_ROOT = CROP_DET_DIR
+    window = [300, 1800]
 
     for setting_name in experiment_subdirs:
 
@@ -435,6 +438,26 @@ if __name__ == '__main__':
 
         CROP_DET_DIR = CROP_DET_ROOT + '/' + setting_name
 
+        roi_path =  'results/' + general.SCENE_NAME + '/' + 'accuracy/' + 'roi/' + setting_name + '.npy'
+        baseline_path = 'results/' + general.SCENE_NAME + '/' +'accuracy/' +  'baseline.npy'
+
+        for file in [roi_path, baseline_path]:
+            directory = os.path.dirname(file)
+            Path(directory).mkdir(parents=True, exist_ok=True)
+
+        baseline_res, roi_res = car_counting_Baseline_Roi(cameras, window, \
+                                                          scene_name=general.SCENE_NAME, setting_name=setting_name)
+
+        # np.save(baseline_path, np.array(baseline_res))
+        # np.save(roi_path, np.array(roi_res))
+
+        if not EVA_REDUCTO: continue
+
+        # Only evaluate Reducto on selected parameter settings
+        if setting_name != '1e-06_1.0': continue
+
+        # The following logic block works for Reducto Mudule
+        
         cameras_same_t_to_bbox_id = {cam: {} for cam in cameras}
         cameras_diff_t_to_bbox_id = {cam: {} for cam in cameras}
 
@@ -444,41 +467,53 @@ if __name__ == '__main__':
             same_t_to_bbox_id, diff_t_to_bbox_id = assign_ID_time_to_bbox(cam_name, mask_data)
             cameras_same_t_to_bbox_id[cam_name] = same_t_to_bbox_id
             cameras_diff_t_to_bbox_id[cam_name] = diff_t_to_bbox_id
-        
-        ## The following logic block works for Reducto Mudule
-        # roi_t_to_count = { cam_name: { t: len(cameras_same_t_to_bbox_id[cam_name][t]) \
-        #                             for t in cameras_same_t_to_bbox_id[cam_name]} \
-        #                 for cam_name in cameras_same_t_to_bbox_id } 
 
-        # baseline_t_to_count = { cam_name: { t: len(cameras_same_t_to_bbox_id[cam_name][t]) + roi_t_to_count[cam_name][t]\
-        #                             for t in cameras_same_t_to_bbox_id[cam_name]} \
-        #                 for cam_name in cameras_same_t_to_bbox_id } 
+        roi_t_to_count = { cam_name: { t: len(cameras_same_t_to_bbox_id[cam_name][t]) \
+                                    for t in cameras_same_t_to_bbox_id[cam_name]} \
+                        for cam_name in cameras_same_t_to_bbox_id } 
 
-        # roi_selected_frames = get_reducto_selected_frames(roi_t_to_count, roi=True, \
-        #                                                   scene_setting='S01', crop_setting=setting_name)
+        baseline_t_to_count = { cam_name: { t: len(cameras_same_t_to_bbox_id[cam_name][t]) + roi_t_to_count[cam_name][t]\
+                                    for t in cameras_same_t_to_bbox_id[cam_name]} \
+                        for cam_name in cameras_same_t_to_bbox_id }
 
-        # baseline_selected_frames = get_reducto_selected_frames(baseline_t_to_count, roi=False)
+        for idx, target_acc in enumerate(general.reducto_acc):
 
-        # reducto_res = car_counting_Reducto(cameras, baseline_selected_frames, [600, 1800])
+            Results = {'reducto': {}, 'reductoroi': {}}
+            Results_path = 'results/' + general.SCENE_NAME + '/' + 'accuracy/' + 'reducto/' + str(target_acc) + '.npy'
 
-        # reductoroi_res = car_counting_ReductoRoi(cameras, roi_selected_frames, [600, 1800])
+            directory = os.path.dirname(Results_path)
+            Path(directory).mkdir(parents=True, exist_ok=True)
 
-        baseline_res, roi_res = car_counting_Baseline_Roi(cameras, [300, 1300], \
-                                                          scene_name=general.SCENE_NAME, setting_name=setting_name)
+            reductoroi_selected_frames = get_reducto_selected_frames(roi_t_to_count, roi=True, target_acc=target_acc,\
+                                                            scene_setting='S01', crop_setting=setting_name)
 
-        # roi_err = [abs(baseline_res[i] - roi_res[i]) for i in range(len(baseline_res))]
+            reducto_selected_frames = get_reducto_selected_frames(baseline_t_to_count, roi=False, target_acc=target_acc,\
+                                                            scene_setting='S01', crop_setting=setting_name)
 
-        # reducto_err = [abs(baseline_res[i] - reducto_res[i]) for i in range(len(baseline_res))]
-        # reductoroi_err = [abs(baseline_res[i] - reductoroi_res[i]) for i in range(len(baseline_res))]
+            reducto_res = car_counting_Reducto(cameras, reducto_selected_frames, window)
 
-        # print(setting_name, ' baseline: ',  sum(baseline_res) / len(baseline_res))
-        # print(setting_name, ' roi_error: ', sum(roi_err) / sum(baseline_res))
-        # print(sum(reducto_err) / sum(baseline_res))
-        # print(sum(reductoroi_err) / sum(baseline_res))
+            reductoroi_res = car_counting_ReductoRoi(cameras, reductoroi_selected_frames, window)
 
-        # plt.plot(roi_err)
-        # plt.show()
-        # plt.plot(reducto_err)
-        # plt.show()
-        # plt.plot(reductoroi_err)
-        # plt.show()
+            Results['reducto']['frames'] = reducto_selected_frames
+            Results['reducto']['count'] = reducto_res
+            Results['reductoroi']['frames'] = reductoroi_selected_frames
+            Results['reductoroi']['count'] = reductoroi_res
+
+            np.save(Results_path, Results)
+
+            roi_err = [abs(baseline_res[i] - roi_res[i]) for i in range(len(baseline_res))]
+
+            reducto_err = [abs(baseline_res[i] - reducto_res[i]) for i in range(len(baseline_res))]
+            reductoroi_err = [abs(baseline_res[i] - reductoroi_res[i]) for i in range(len(baseline_res))]
+
+            print(setting_name, ' baseline: ',  sum(baseline_res) / len(baseline_res))
+            print(setting_name, ' roi_error: ', sum(roi_err) / sum(baseline_res))
+            print(sum(reducto_err) / sum(baseline_res))
+            print(sum(reductoroi_err) / sum(baseline_res))
+
+            # plt.plot(roi_err)
+            # plt.show()
+            # plt.plot(reducto_err)
+            # plt.show()
+            # plt.plot(reductoroi_err)
+            # plt.show()
